@@ -70,16 +70,14 @@ class ESQuery(object):
             return [self._traverse_biothingdoc(d, context_key, dotfield_ret, options) for d in doc]
         elif isinstance(doc, dict):
             this_list = []
-            if context_key in self._context and options and options.jsonld:
-                doc['@context'] = self._context[context_key]['@context']
             for key in sorted(doc):
-                new_key = key if context_key == 'root' else context_key + '/' + key
+                new_key = key if not context_key else context_key + '.' + key
                 this_list.append( (key, self._traverse_biothingdoc(doc[key], new_key, dotfield_ret, options)) )
             return OrderedDict(this_list)
         else:
-            if options.dotfield and not options.jsonld:
+            if options.dotfield or options.jsonld:
                 # jsonld option doesn't play nice with dotfields, if jsonld=true is set it overrides dotfield
-                dotfield_ret.setdefault(re.sub(r'/', '.', context_key), []).append(doc)
+                dotfield_ret.setdefault(context_key, []).append(doc)
             return doc
 
     def _get_biothingdoc(self, hit, options=None):
@@ -98,10 +96,12 @@ class ESQuery(object):
         doc = self._modify_biothingdoc(doc=doc, options=options)
         # Sort keys, and add jsonld
         dotfield_ret = {}
-        doc = self._traverse_biothingdoc(doc=doc, context_key='root', 
+        doc = self._traverse_biothingdoc(doc=doc, context_key='', 
             dotfield_ret=dotfield_ret, options=options)
-        if options.dotfield and not options.jsonld:
-            # jsonld option doesn't play nice with dotfields, if jsonld=true is set it overrides dotfield
+        if options.jsonld:
+            return OrderedDict([(k, v[0]) if len(v) == 1 else (k,v) for (k,v) in [('@context', self._context['@context']), ('@id', 'http://mygene.info/v3/gene/{}'.format(doc['_id']))] + 
+                    sorted(dotfield_ret.items(), key=lambda i: i[0])])
+        elif options.dotfield:
             return OrderedDict([(k, v[0]) if len(v) == 1 else (k,v) for (k,v) in sorted(dotfield_ret.items(), key=lambda i: i[0])])
         return doc
 
